@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Nimi</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1"
+    />
+    <link rel="stylesheet" type="text/css" media="screen" href="style.css" />
+    <script type="module">
+      import interact from "https://cdn.jsdelivr.net/npm/@interactjs/interactjs/index.js";
+
+      const letters = [
+        "J",
+        "U",
+        "S",
+        "S",
+        "I",
+        "S",
+        "A",
+        "T",
+        "U",
+        "B",
+        "A",
+        "B",
+        "Y",
+      ];
+
+      const randomCoord = () => {
+        var x =
+          Math.random() * window.innerWidth * 0.6 + 0.1 * window.innerWidth;
+        var y =
+          Math.random() * window.innerHeight * 0.6 + 0.1 * window.innerHeight;
+        console.log({ x, y });
+        return { x, y };
+      };
+
+      const createElement = (letter) => {
+        var div = document.createElement("div");
+        div.setAttribute("class", "draggable");
+        var tag = document.createElement("p");
+        var text = document.createTextNode(letter);
+        tag.appendChild(text);
+        div.appendChild(tag);
+
+        var element = document.getElementById("body");
+        element.appendChild(div);
+
+        var coord = randomCoord();
+        div.style.webkitTransform = div.style.transform =
+          "translate(" + coord.x + "px, " + coord.y + "px)";
+
+        div.setAttribute("data-x", coord.x);
+        div.setAttribute("data-y", coord.y);
+      };
+
+      letters.forEach((letter) => {
+        createElement(letter);
+      });
+
+      // target elements with the "draggable" class
+      interact(".draggable").draggable({
+        // keep the element within the area of it's parent
+        modifiers: [
+          interact.modifiers.restrictRect({
+            restriction: "parent",
+          }),
+        ],
+        listeners: {
+          // call this function on every dragmove event
+          move: dragMoveListener,
+        },
+      });
+
+      function dragMoveListener(event) {
+        var target = event.target;
+        // keep the dragged position in the data-x/data-y attributes
+        var x = (parseFloat(target.getAttribute("data-x")) || 0) + event.dx;
+        var y = (parseFloat(target.getAttribute("data-y")) || 0) + event.dy;
+
+        // translate the element
+        target.style.webkitTransform = target.style.transform =
+          "translate(" + x + "px, " + y + "px)";
+
+        // update the posiion attributes
+        target.setAttribute("data-x", x);
+        target.setAttribute("data-y", y);
+      }
+
+      // this function is used later in the resizing and gesture demos
+      window.dragMoveListener = dragMoveListener;
+    </script>
+  </head>
+  <body id="body"></body>
+</html>

@@ -1,0 +1,35 @@
+@font-face {
+  font-family: calibri;
+  src: url(font.ttf);
+}
+
+body {
+  display: flex;
+  height: calc(95.5vh);
+  width: calc(99vw);
+}
+
+.draggable {
+  position: absolute;
+  color: #04cb04;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-transform: translate(0px, 0px);
+  transform: translate(0px, 0px);
+  text-align: center;
+  height: 100px;
+  width: 100px;
+}
+
+p {
+  display: block;
+  margin-block-start: 0em;
+  margin-block-end: 0em;
+  margin-inline-start: 0px;
+  margin-inline-end: 0px;
+  font-size: 100px;
+  font-weight: bold;
+  line-height: 100px;
+  font-family: "calibri";
+}
