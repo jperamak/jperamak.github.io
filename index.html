@@ -10,99 +10,105 @@
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
   --bg: #f3f4f7;
-  --panel: #ffffff;
+  --panel: rgba(255, 255, 255, 0.92);
   --text: #15171f;
   --muted: #5a6072;
   --line: #d5d9e4;
   --accent: #5b3df5;
-  --accent-text: #ffffff;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0c0d14; --panel: #151724; --text: #e7e9f3; --muted: #8e94ab;
-    --line: #2a2e42; --accent: #8f7bff; --accent-text: #0c0d14; color-scheme: dark;
+    --bg: #0c0d14; --panel: rgba(21, 23, 36, 0.92); --text: #e7e9f3; --muted: #8e94ab;
+    --line: #2a2e42; --accent: #8f7bff; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0c0d14; --panel: #151724; --text: #e7e9f3; --muted: #8e94ab;
-  --line: #2a2e42; --accent: #8f7bff; --accent-text: #0c0d14; color-scheme: dark;
+  --bg: #0c0d14; --panel: rgba(21, 23, 36, 0.92); --text: #e7e9f3; --muted: #8e94ab;
+  --line: #2a2e42; --accent: #8f7bff; color-scheme: dark;
 }
 html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+html, body { height: 100%; }
 * { box-sizing: border-box; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
   font-family: "Rajdhani", "Segoe UI", system-ui, sans-serif;
-  font-size: 17px;
+  font-size: 16px; overflow: hidden;
 }
-html, body { height: 100%; }
-main { min-height: 100%; display: flex; flex-direction: column; padding: 14px 16px 12px; }
-h1 { font-size: 1.7rem; font-weight: 600; margin: 0 0 4px; letter-spacing: .01em; }
-p.sub { margin: 0 0 18px; color: var(--muted); max-width: 62ch; }
+main { position: relative; height: 100%; }
+
+.stage { position: absolute; inset: 0; background: #05060b; overflow: hidden; line-height: 0; }
+canvas { position: absolute; display: block; image-rendering: pixelated; cursor: crosshair; }
+
+.panel {
+  position: absolute; top: 10px; left: 10px; right: 10px; z-index: 2;
+  max-height: calc(100% - 20px); overflow: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 14px;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
+h1 { font-size: 1.25rem; font-weight: 600; margin: 0; letter-spacing: .01em; }
+#status { flex: 1; min-width: 180px; color: var(--muted); font-variant-numeric: tabular-nums; }
+button#toggle {
+  font: inherit; font-weight: 600; color: var(--text); background: transparent;
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 14px; cursor: pointer;
+}
+button#toggle:hover { border-color: var(--accent); }
+button#toggle:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
 .controls {
-  display: grid; gap: 14px 24px; align-items: end;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  background: var(--panel); border: 1px solid var(--line);
-  border-radius: 10px; padding: 16px; margin-bottom: 16px;
+  display: grid; gap: 12px 24px; align-items: end;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line);
 }
+.controls[hidden] { display: none; }
 label { display: block; font-weight: 600; }
 label span.val { float: right; font-variant-numeric: tabular-nums; color: var(--accent); }
 input[type=range] { width: 100%; margin: 8px 0 0; accent-color: var(--accent); }
-label.check { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer; }
+label.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 label.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
-canvas.clickable { cursor: crosshair; }
-button#strike {
-  font: inherit; font-weight: 700; font-size: 1.15rem; letter-spacing: .04em;
-  background: var(--accent); color: var(--accent-text);
-  border: 0; border-radius: 8px; padding: 12px 28px; cursor: pointer;
-}
-button#strike:hover { filter: brightness(1.1); }
-button#strike:focus-visible, input:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
-.stage {
-  background: #05060b; border-radius: 10px; border: 1px solid var(--line);
-  overflow: hidden; line-height: 0; position: relative;
-  flex: 1; min-height: 240px;
-}
-canvas { position: absolute; display: block; image-rendering: pixelated; }
-#status { margin-top: 10px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 1.4em; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Electric discharge</h1>
-  <p class="sub">Tendrils crawl outward from a single point, one pixel at a time. They never cross, and each split halves their strength until the branches die out.</p>
+  <div class="stage"><canvas id="c" width="1000" height="1000"></canvas></div>
 
-  <section class="controls" aria-label="Controls">
-    <label>Origin strength <span class="val" id="vStrength">153</span>
-      <input type="range" id="strength" min="5" max="200" step="1" value="153">
-    </label>
-    <label>Tendrils <span class="val" id="vCount">3</span>
-      <input type="range" id="count" min="1" max="8" step="1" value="3">
-    </label>
-    <label>Split chance <span class="val" id="vSplit">8%</span>
-      <input type="range" id="split" min="0" max="100" step="1" value="8">
-    </label>
-    <label>Momentum <span class="val" id="vBias">2.8</span>
-      <input type="range" id="bias" min="0" max="4" step="0.1" value="2.8">
-    </label>
-    <label>Speed <span class="val" id="vSpeed">1.0</span>
-      <input type="range" id="speed" min="0.1" max="3" step="0.1" value="1">
-    </label>
-    <div>
+  <section class="panel" aria-label="Settings">
+    <div class="bar">
+      <h1>Electric discharge</h1>
+      <span id="status" role="status">Click the canvas to strike.</span>
+      <button id="toggle" type="button" aria-expanded="true" aria-controls="settings">Hide settings</button>
+    </div>
+    <div class="controls" id="settings">
+      <label>Origin strength <span class="val" id="vStrength">1200</span>
+        <input type="range" id="strength" min="5" max="1800" step="1" value="1200">
+      </label>
+      <label>Tendrils <span class="val" id="vCount">3</span>
+        <input type="range" id="count" min="1" max="8" step="1" value="3">
+      </label>
+      <label>Split chance <span class="val" id="vSplit">4%</span>
+        <input type="range" id="split" min="0" max="100" step="1" value="4">
+      </label>
+      <label>Momentum <span class="val" id="vBias">2.8</span>
+        <input type="range" id="bias" min="0" max="4" step="0.1" value="2.8">
+      </label>
+      <label>Speed <span class="val" id="vSpeed">1.0</span>
+        <input type="range" id="speed" min="0.1" max="3" step="0.1" value="1">
+      </label>
       <label class="check"><input type="checkbox" id="clearStrike" checked> Clear canvas when striking</label>
     </div>
   </section>
-
-  <div class="stage"><canvas id="c" width="1000" height="1000"></canvas></div>
-  <div id="status" role="status">Set the controls, then click the canvas to strike.</div>
 </main>
 
 <script>
 (function () {
-  var CELL = 5, W = 200, H = 200, CX = 100, CY = 100, OX = CX, OY = CY;
+  var CELL = 2, W = 200, H = 200, CX = 100, CY = 100, OX = CX, OY = CY;
   var canvas = document.getElementById('c');
   var ctx = canvas.getContext('2d');
+  var stage = document.querySelector('.stage');
   var statusEl = document.getElementById('status');
+  var clearBox = document.getElementById('clearStrike');
 
   var ids = ['strength', 'count', 'split', 'bias', 'speed'];
   var els = {};
@@ -117,7 +123,17 @@ canvas { position: absolute; display: block; image-rendering: pixelated; }
   ids.forEach(function (id) { els[id].addEventListener('input', syncLabels); });
   syncLabels();
 
-  // 8 neighbours, with unit vectors for outward bias
+  // collapse / expand the settings
+  var toggleBtn = document.getElementById('toggle');
+  var settings = document.getElementById('settings');
+  toggleBtn.addEventListener('click', function () {
+    var open = settings.hidden;
+    settings.hidden = !open;
+    toggleBtn.setAttribute('aria-expanded', String(open));
+    toggleBtn.textContent = open ? 'Hide settings' : 'Show settings';
+  });
+
+  // 8 neighbours, with unit vectors
   var DIRS = [
     [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]
   ].map(function (d) {
@@ -125,7 +141,7 @@ canvas { position: absolute; display: block; image-rendering: pixelated; }
     return { dx: d[0], dy: d[1], ux: d[0] / l, uy: d[1] / l };
   });
 
-  var occ, active, S0, splitP, running = false, painted = 0, raf = 0, speedAcc = 0;
+  var occ, active = [], splitP = 0.04, running = false, painted = 0, raf = 0, speedAcc = 0;
 
   function paint(x, y, s, s0, shift) {
     var f = Math.max(0, Math.min(1, s / s0));
@@ -143,17 +159,21 @@ canvas { position: absolute; display: block; image-rendering: pixelated; }
     return x >= 0 && y >= 0 && x < W && y < H && !occ[y * W + x];
   }
 
+  // momentum: lean away from the point where this tendril split off
   function chooseMove(t) {
-    // momentum: lean away from the point where this tendril split off
+    var biasK = +els.bias.value;
     var ox = t.x - t.sx, oy = t.y - t.sy;
     var len = Math.hypot(ox, oy);
     if (len === 0) { ox = t.hd.ux; oy = t.hd.uy; }
     else { ox /= len; oy /= len; }
-    var biasK = +els.bias.value;
     var opts = [], total = 0;
     for (var i = 0; i < 8; i++) {
-      var d = DIRS[i], nx = t.x + d.dx, ny = t.y + d.dy;
-      if (!isFree(nx, ny)) continue;
+      var d = DIRS[i];
+      if (!isFree(t.x + d.dx, t.y + d.dy)) continue;
+      // skip moves that would touch an existing pixel (split halves get the usual exemption)
+      if (t.fresh
+        ? touches(t.x + d.dx, t.y + d.dy, t.x, t.y, t.x, t.y)
+        : touches(t.x + d.dx, t.y + d.dy, t.x, t.y)) continue;
       var w = Math.exp(biasK * (d.ux * ox + d.uy * oy));
       opts.push({ d: d, w: w });
       total += w;
@@ -200,7 +220,7 @@ canvas { position: absolute; display: block; image-rendering: pixelated; }
         if (!isFree(t.x + d.dx, t.y + d.dy)) continue;
       } else {
         d = chooseMove(t);
-        if (!d || (t.fresh ? touches(t.x + d.dx, t.y + d.dy, t.x, t.y, t.x, t.y) : touches(t.x + d.dx, t.y + d.dy, t.x, t.y))) continue; // stops
+        if (!d) continue; // no non-touching move left: stops
       }
       t.x += d.dx; t.y += d.dy;
       occ[t.y * W + t.x] = 1;
@@ -208,7 +228,9 @@ canvas { position: absolute; display: block; image-rendering: pixelated; }
       t.first = false;
       t.fresh = false;
 
-      // strength only changes at splits; a split whose halves fall below 1 dissipates
+      // strength drains by 1 per step and halves at each split; below 1 it dissipates
+      t.s -= 1;
+      if (t.s < 1) continue;
       if (Math.random() < splitP) {
         var h = t.s / 2;
         if (h >= 1) {
@@ -232,7 +254,7 @@ canvas { position: absolute; display: block; image-rendering: pixelated; }
     for (var i = 0; i < steps && active.length; i++) tick();
     statusEl.textContent = active.length
       ? 'Discharging: ' + active.length + ' active tendril' + (active.length === 1 ? '' : 's') + ', ' + painted + ' pixels'
-      : 'Discharge complete: ' + painted + ' pixels';
+      : 'Discharge complete: ' + painted + ' pixels. Click to strike again.';
     if (active.length) {
       raf = requestAnimationFrame(loop);
     } else {
@@ -241,10 +263,9 @@ canvas { position: absolute; display: block; image-rendering: pixelated; }
   }
 
   function strike(px, py) {
-    OX = px === undefined ? CX : px;
-    OY = py === undefined ? CY : py;
-    var clear = document.getElementById('clearStrike').checked || !occ;
-    S0 = +els.strength.value;
+    OX = px; OY = py;
+    var clear = clearBox.checked || !occ;
+    var S0 = +els.strength.value;
     splitP = +els.split.value / 100;
     var n = +els.count.value;
     var strikeShift = Math.floor(Math.random() * 180) - 90; // rotates the whole gradient, within ±90°
@@ -253,6 +274,7 @@ canvas { position: absolute; display: block; image-rendering: pixelated; }
       running = false;
       occ = new Uint8Array(W * H);
       painted = 0;
+      active = [];
       ctx.fillStyle = '#05060b';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
@@ -264,7 +286,6 @@ canvas { position: absolute; display: block; image-rendering: pixelated; }
 
     // spread starting directions evenly around the origin, random rotation
     var offset = (Math.random() * 8) | 0;
-    if (clear) active = [];
     for (var i = 0; i < n; i++) {
       var idx = (offset + Math.round(i * 8 / n)) % 8;
       active.push({ x: OX, y: OY, sx: OX, sy: OY, s: S0, s0: S0, shift: strikeShift, first: true, dir: DIRS[idx], hd: DIRS[idx] });
@@ -275,7 +296,6 @@ canvas { position: absolute; display: block; image-rendering: pixelated; }
     }
   }
 
-  canvas.classList.add('clickable');
   canvas.addEventListener('click', function (e) {
     var r = canvas.getBoundingClientRect();
     var gx = Math.floor((e.clientX - r.left) / r.width * W);
@@ -285,8 +305,7 @@ canvas { position: absolute; display: block; image-rendering: pixelated; }
     strike(gx, gy);
   });
 
-  var stage = document.querySelector('.stage');
-  // the canvas fills the stage in whole 5px pixels; resizing starts a fresh canvas
+  // the canvas fills the window in whole 2px pixels; resizing the window starts a fresh canvas
   function resetCanvas(force) {
     var nw = Math.max(20, Math.floor(stage.clientWidth / CELL));
     var nh = Math.max(20, Math.floor(stage.clientHeight / CELL));
