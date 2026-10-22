@@ -66,6 +66,10 @@ button#toggle:focus-visible, input:focus-visible { outline: 3px solid var(--acce
 label { display: block; font-weight: 600; }
 label span.val { float: right; font-variant-numeric: tabular-nums; color: var(--accent); }
 input[type=range] { width: 100%; margin: 8px 0 0; accent-color: var(--accent); }
+select {
+  width: 100%; margin-top: 8px; font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
+}
 label.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 label.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
 </style>
@@ -87,14 +91,20 @@ label.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--ac
       <label>Tendrils <span class="val" id="vCount">3</span>
         <input type="range" id="count" min="1" max="8" step="1" value="3">
       </label>
-      <label>Split chance <span class="val" id="vSplit">4%</span>
-        <input type="range" id="split" min="0" max="100" step="1" value="4">
+      <label>Split chance <span class="val" id="vSplit">4.0%</span>
+        <input type="range" id="split" min="0" max="10" step="0.1" value="4">
       </label>
-      <label>Momentum <span class="val" id="vBias">2.8</span>
+      <label>Momentum mode
+        <select id="mode">
+          <option value="avoid">Avoid existing pixels</option>
+          <option value="split">Away from split point</option>
+        </select>
+      </label>
+      <label><span id="biasName">Momentum</span> <span class="val" id="vBias">2.8</span>
         <input type="range" id="bias" min="0" max="4" step="0.1" value="2.8">
       </label>
       <label>Speed <span class="val" id="vSpeed">1.0</span>
-        <input type="range" id="speed" min="0.1" max="3" step="0.1" value="1">
+        <input type="range" id="speed" min="0.1" max="10" step="0.1" value="1">
       </label>
       <label class="check"><input type="checkbox" id="clearStrike" checked> Clear canvas when striking</label>
     </div>
@@ -109,6 +119,7 @@ label.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--ac
   var stage = document.querySelector('.stage');
   var statusEl = document.getElementById('status');
   var clearBox = document.getElementById('clearStrike');
+  var modeEl = document.getElementById('mode');
 
   var ids = ['strength', 'count', 'split', 'bias', 'speed'];
   var els = {};
@@ -116,11 +127,13 @@ label.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--ac
   function syncLabels() {
     document.getElementById('vStrength').textContent = els.strength.value;
     document.getElementById('vCount').textContent = els.count.value;
-    document.getElementById('vSplit').textContent = els.split.value + '%';
+    document.getElementById('vSplit').textContent = (+els.split.value).toFixed(1) + '%';
     document.getElementById('vBias').textContent = (+els.bias.value).toFixed(1);
+    document.getElementById('biasName').textContent = modeEl.value === 'avoid' ? 'Avoidance' : 'Momentum';
     document.getElementById('vSpeed').textContent = (+els.speed.value).toFixed(1);
   }
   ids.forEach(function (id) { els[id].addEventListener('input', syncLabels); });
+  modeEl.addEventListener('change', syncLabels);
   syncLabels();
 
   // collapse / expand the settings
@@ -151,7 +164,10 @@ label.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--ac
     var sat = 100 * (1 - w);
     var light = 45 + 20 * f + 35 * w;
     ctx.fillStyle = 'hsl(' + hue + ',' + sat + '%,' + light + '%)';
-    ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+    // thickness by strength: under 10% = 1px, then 2px (10%), 3px (35%), 4px from 60% up
+    var size = f >= 0.6 ? 4 : f >= 0.35 ? 3 : f >= 0.1 ? 2 : 1;
+    var off = Math.floor((CELL - size) / 2);
+    ctx.fillRect(x * CELL + off, y * CELL + off, size, size);
     painted++;
   }
 
@@ -159,8 +175,21 @@ label.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--ac
     return x >= 0 && y >= 0 && x < W && y < H && !occ[y * W + x];
   }
 
-  // momentum: lean away from the point where this tendril split off
+  // How much free space lies along direction d from (x, y), 0 to 1 (looks LOOK pixels ahead)
+  var LOOK = 14;
+  function rayOpen(x, y, d) {
+    var n = 0;
+    for (var k = 1; k <= LOOK; k++) {
+      if (!isFree(x + d.dx * k, y + d.dy * k)) break;
+      n++;
+    }
+    return n / LOOK;
+  }
+
+  // mode "split": lean away from the point where this tendril split off
+  // mode "avoid": lean toward directions with free space ahead (plus a light outward drift)
   function chooseMove(t) {
+    var avoid = modeEl.value === 'avoid';
     var biasK = +els.bias.value;
     var ox = t.x - t.sx, oy = t.y - t.sy;
     var len = Math.hypot(ox, oy);
@@ -174,7 +203,10 @@ label.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--ac
       if (t.fresh
         ? touches(t.x + d.dx, t.y + d.dy, t.x, t.y, t.x, t.y)
         : touches(t.x + d.dx, t.y + d.dy, t.x, t.y)) continue;
-      var w = Math.exp(biasK * (d.ux * ox + d.uy * oy));
+      var align = d.ux * ox + d.uy * oy;
+      var w = avoid
+        ? Math.exp(biasK * (2 * rayOpen(t.x, t.y, d) - 1) + align)
+        : Math.exp(biasK * align);
       opts.push({ d: d, w: w });
       total += w;
     }
@@ -228,16 +260,17 @@ label.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--ac
       t.first = false;
       t.fresh = false;
 
-      // strength drains by 1 per step and halves at each split; below 1 it dissipates
+      // strength drains by 1 per step and splits 25/50/25 at each split; below 1 it dissipates
       t.s -= 1;
       if (t.s < 1) continue;
       if (Math.random() < splitP) {
-        var h = t.s / 2;
-        if (h >= 1) {
-          var di = DIRS.indexOf(d);
-          // each half starts from the split point, leaning 45° to either side
-          next.push({ x: t.x, y: t.y, sx: t.x, sy: t.y, s: h, s0: t.s0, shift: t.shift, fresh: true, hd: DIRS[(di + 1) % 8] });
-          next.push({ x: t.x, y: t.y, sx: t.x, sy: t.y, s: h, s0: t.s0, shift: t.shift, fresh: true, hd: DIRS[(di + 7) % 8] });
+        var di = DIRS.indexOf(d);
+        // three branches from the split point: 25% and 25% leaning 45° to either side, 50% straight on
+        var parts = [[0.25, 1], [0.5, 0], [0.25, 7]];
+        for (var p = 0; p < 3; p++) {
+          var cs = t.s * parts[p][0];
+          if (cs < 1) continue; // too weak: dissipates
+          next.push({ x: t.x, y: t.y, sx: t.x, sy: t.y, s: cs, s0: t.s0, shift: t.shift, fresh: true, hd: DIRS[(di + parts[p][1]) % 8] });
         }
       } else {
         next.push(t);
